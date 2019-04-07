@@ -2,37 +2,43 @@ package promise
 
 import (
 	"fmt"
-	"runtime"
 	"sync"
-	"time"
 )
 
-type resolver func(interface{}) interface{}
-type rejecter func(interface{}) interface{}
-type executor func(resolver, rejecter)
+type handler func(interface{}) interface{}
+type executor func(handler, handler)
 
 type status int
 
-var initial status = 0
-var resolved status = 1
-var rejected status = 2
+var sRESOLVED status = 1
+var sREJECTED status = 2
 
 type Promise struct {
-	stat    status
-	data    interface{}
-	lock    sync.Mutex
-	resFunc resolver
-	rejFunc rejecter
+	stat status
+	data interface{}
+	lock sync.Mutex
+	res  handler
+	rej  handler
+	next *Promise
 }
 
 func (p *Promise) resolve(v interface{}) interface{} {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 	p.data = v
-	p.stat = resolved
-	fmt.Println("resolve")
-	if p.resFunc != nil {
-		p.resFunc(p.data)
+	p.stat = sRESOLVED
+
+	if p.res != nil {
+		fmt.Printf("%p resolve1\n", p)
+		d := p.res(p.data)
+		fmt.Printf("%p resolve11\n", p)
+		if p.next != nil {
+			p.next.resolve(d)
+		}
+	} else if p.next != nil {
+		fmt.Printf("%p resolve2\n", p)
+		p.next.resolve(p.data)
+		fmt.Printf("%p resolve21\n", p)
 	}
 	return nil
 }
@@ -41,43 +47,51 @@ func (p *Promise) reject(v interface{}) interface{} {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 	p.data = v
-	p.stat = rejected
-	fmt.Println("reject")
-	if p.rejFunc != nil {
-		p.rejFunc(p.data)
+	p.stat = sREJECTED
+
+	if p.rej != nil {
+		d := p.rej(v)
+		if p.next != nil {
+			p.next.resolve(d)
+		}
+	} else if p.next != nil {
+		return p.next.reject(p.data)
 	}
 	return nil
 }
 
-func (p *Promise) Then(resolveFunc func(interface{}) interface{}, rejectFunc func(interface{}) interface{}) *Promise {
+func (p *Promise) handleResult(h handler) *Promise {
+	result := h(p.data)
+	fmt.Printf("%p ", p)
+	if pp, ok := result.(*Promise); ok {
+		fmt.Printf("%p handleResult1\n", p)
+		return pp
+	} else {
+		fmt.Printf("%p handleResult2\n", p)
+		return Resolve(result)
+	}
+}
+
+func (p *Promise) Then(onResolve handler, onReject handler) *Promise {
 	p.lock.Lock()
 	defer p.lock.Unlock()
-	fmt.Println("then")
-	var data interface{} = nil
-	if p.stat == resolved {
-		data = resolveFunc(p.data)
-		if pp, ok := data.(*Promise); ok {
-			return pp
-		} else {
-			return Resolve(data)
-		}
-	} else if p.stat == rejected {
-		data = rejectFunc(p.data)
-		if pp, ok := data.(*Promise); ok {
-			return pp
-		} else {
-			return Resolve(data)
-		}
+	fmt.Printf("%p ", p)
+	if p.stat == sRESOLVED {
+		fmt.Println("then res ")
+		return p.handleResult(onResolve)
+	} else if p.stat == sREJECTED {
+		fmt.Println("then rej ")
+		return p.handleResult(onReject)
 	} else {
-		p.resFunc = resolveFunc
-		p.rejFunc = rejectFunc
-		return p
+		fmt.Println("then else ")
+		newP := &Promise{res: onResolve, rej: onReject}
+		p.next = newP
+		return newP
 	}
-
 }
 
 func Resolve(v interface{}) *Promise {
-	return New(func(res resolver, rej rejecter) {
+	return New(func(res handler, rej handler) {
 		res(v)
 	})
 }
