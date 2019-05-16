@@ -36,6 +36,18 @@ func New(exec executor) *Promise {
 	return p
 }
 
+func Resolve(v interface{}) *Promise {
+	return New(func(res, rej consumer) {
+		res(v)
+	})
+}
+
+func Reject(v interface{}) *Promise {
+	return New(func(res, rej consumer) {
+		rej(v)
+	})
+}
+
 func (p *Promise) handleRes(v interface{}) {
 	if p.stat != sPENDING {
 		return
@@ -85,27 +97,46 @@ func (p *Promise) Then(onRes function, onRej function) *Promise {
 		newP.resHandler = func(v interface{}) {
 			fmt.Println("resh")
 			if onRes != nil {
-				newP.handleRes(onRes(v))
+				handleValue(newP, p.value, onRes)
+				//newP.handleRes(onRes(v))
 			}
 		}
 		newP.rejHandler = func(v interface{}) {
 			fmt.Println("rejh")
 			if onRej != nil {
-				newP.handleRes(onRej(v))
+				handleValue(newP, p.value, onRej)
+				//newP.handleRes(onRej(v))
 			}
 		}
 	} else if p.stat == sRESOLVED {
 		fmt.Println("res")
 		if onRes != nil {
-			newP.handleRes(onRes(p.value))
+			handleValue(newP, p.value, onRes)
+			//newP.handleRes(onRes(p.value))
 		}
 	} else if p.stat == sREJECTED {
 		fmt.Println("rej")
 		if onRej != nil {
-			newP.handleRes(onRej(p.value))
+			handleValue(newP, p.value, onRej)
+			//newP.handleRes(onRej(p.value))
 		}
 	}
 	return newP
+}
+
+func handleValue(p *Promise, input interface{}, fn function) {
+	value := fn(input)
+	if pp, ok := value.(*Promise); ok {
+		pp.Then(func(v interface{}) interface{} {
+			p.handleRes(v)
+			return v
+		}, func(v interface{}) interface{} {
+			p.handleRej(v)
+			return v
+		})
+	} else {
+		p.handleRes(value)
+	}
 }
 
 func (p *Promise) Catch(onErr function) *Promise {
