@@ -56,3 +56,14 @@ func TestPromiseValue(t *testing.T) {
 	})
 	fmt.Println("TestPromiseValue")
 }
+
+func TestWrap(t *testing.T) {
+	warpFunc := Wrap(func() interface{} {
+		return "resolve value"
+	})
+
+	warpFunc().Then(func(v interface{}) interface{} {
+		fmt.Println("TestWrap result:", v)
+		return nil
+	}, nil)
+}

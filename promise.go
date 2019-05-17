@@ -5,8 +5,9 @@ import (
 	"sync"
 )
 
-type function func(interface{}) interface{}
+type supplier func() interface{}
 type consumer func(interface{})
+type function func(interface{}) interface{}
 type executor func(consumer, consumer)
 
 type status int
@@ -46,6 +47,12 @@ func Reject(v interface{}) *Promise {
 	return New(func(res, rej consumer) {
 		rej(v)
 	})
+}
+
+func Wrap(fn supplier) func() *Promise {
+	return func() *Promise {
+		return Resolve(fn())
+	}
 }
 
 func (p *Promise) handleRes(v interface{}) {
