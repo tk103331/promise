@@ -55,6 +55,47 @@ func Wrap(fn supplier) func() *Promise {
 	}
 }
 
+func All(ps ...*Promise) *Promise {
+	return New(func(res, rej consumer) {
+		total := len(ps)
+		values := make(interface{}, total)
+		count := 0
+		rejected := false
+		for i := 0; i < total; i++ {
+			ps[i].Then(func(v interface{}) interface{} {
+				values[i] = v
+				count++
+				if count == total-1 {
+					res(values)
+				}
+			}, func(v interface{}) interface{} {
+				rejected = true
+				rej(v)
+			})
+		}
+	})
+}
+
+func Race(ps ...*Promise) *Promise {
+	return New(func(res, rej consumer) {
+		for i := 0; i < total; i++ {
+			resolved := false
+			rejected := false
+			ps[i].Then(func(v interface{}) interface{} {
+				if !rejected {
+					resolved = true
+					res(v)
+				}
+			}, func(v interface{}) interface{} {
+				if !resolve {
+					rejected = true
+					rej(v)
+				}
+			})
+		}
+	})
+}
+
 func (p *Promise) handleRes(v interface{}) {
 	if p.stat != sPENDING {
 		return
