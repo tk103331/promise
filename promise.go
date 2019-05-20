@@ -1,7 +1,6 @@
 package promise
 
 import (
-	"fmt"
 	"sync"
 )
 
@@ -58,26 +57,31 @@ func Wrap(fn supplier) func() *Promise {
 func All(ps ...*Promise) *Promise {
 	return New(func(res, rej consumer) {
 		total := len(ps)
-		values := make(interface{}, total)
+		values := make([]interface{}, total)
 		count := 0
 		rejected := false
 		for i := 0; i < total; i++ {
-			ps[i].Then(func(v interface{}) interface{} {
-				values[i] = v
-				count++
-				if count == total-1 {
-					res(values)
-				}
-			}, func(v interface{}) interface{} {
-				rejected = true
-				rej(v)
-			})
+			func(x int) {
+				ps[x].Then(func(v interface{}) interface{} {
+					values[x] = v
+					count++
+					if count == total-1 && !rejected {
+						res(values)
+					}
+					return nil
+				}, func(v interface{}) interface{} {
+					rejected = true
+					rej(v)
+					return nil
+				})
+			}(i)
 		}
 	})
 }
 
 func Race(ps ...*Promise) *Promise {
 	return New(func(res, rej consumer) {
+		total := len(ps)
 		for i := 0; i < total; i++ {
 			resolved := false
 			rejected := false
@@ -86,11 +90,13 @@ func Race(ps ...*Promise) *Promise {
 					resolved = true
 					res(v)
 				}
+				return nil
 			}, func(v interface{}) interface{} {
-				if !resolve {
+				if !resolved {
 					rejected = true
 					rej(v)
 				}
+				return nil
 			})
 		}
 	})
@@ -143,27 +149,23 @@ func (p *Promise) Then(onRes function, onRej function) *Promise {
 	if p.stat == sPENDING {
 		p.next = newP
 		newP.resHandler = func(v interface{}) {
-			fmt.Println("resh")
 			if onRes != nil {
 				handleValue(newP, p.value, onRes)
 				//newP.handleRes(onRes(v))
 			}
 		}
 		newP.rejHandler = func(v interface{}) {
-			fmt.Println("rejh")
 			if onRej != nil {
 				handleValue(newP, p.value, onRej)
 				//newP.handleRes(onRej(v))
 			}
 		}
 	} else if p.stat == sRESOLVED {
-		fmt.Println("res")
 		if onRes != nil {
 			handleValue(newP, p.value, onRes)
 			//newP.handleRes(onRes(p.value))
 		}
 	} else if p.stat == sREJECTED {
-		fmt.Println("rej")
 		if onRej != nil {
 			handleValue(newP, p.value, onRej)
 			//newP.handleRes(onRej(p.value))

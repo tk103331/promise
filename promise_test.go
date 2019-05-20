@@ -2,11 +2,26 @@ package promise
 
 import (
 	"fmt"
+	"strconv"
 	"testing"
 )
 
 func asyncTask(task func()) {
 	go task()
+}
+
+func somePromise(n int) []*Promise {
+	ps := make([]*Promise, n)
+	for i := 0; i < n; i++ {
+		func(x int) {
+			ps[x] = New(func(resolve consumer, reject consumer) {
+				asyncTask(func() {
+					resolve("resolved value:" + strconv.Itoa(x))
+				})
+			})
+		}(i)
+	}
+	return ps
 }
 
 func TestResolve(t *testing.T) {
@@ -64,6 +79,25 @@ func TestWrap(t *testing.T) {
 
 	warpFunc().Then(func(v interface{}) interface{} {
 		fmt.Println("TestWrap result:", v)
+		return nil
+	}, nil)
+}
+
+func TestAll(t *testing.T) {
+	All(somePromise(5)...).Then(func(v interface{}) interface{} {
+		fmt.Println("TestAll result:", v)
+		if vs, ok := v.([]interface{}); ok {
+			for i := 0; i < len(vs); i++ {
+				fmt.Println("\t", vs[i])
+			}
+		}
+		return nil
+	}, nil)
+}
+
+func TestRace(t *testing.T) {
+	Race(somePromise(5)...).Then(func(v interface{}) interface{} {
+		fmt.Println("TestRace result:", v)
 		return nil
 	}, nil)
 }
