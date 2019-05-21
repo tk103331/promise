@@ -28,7 +28,7 @@ type Promise struct {
 
 func New(exec executor) *Promise {
 	p := &Promise{}
-	exec(func(v interface{}) {
+	go exec(func(v interface{}) {
 		p.handleRes(v)
 	}, func(v interface{}) {
 		p.handleRej(v)
@@ -103,6 +103,8 @@ func Race(ps ...*Promise) *Promise {
 }
 
 func (p *Promise) handleRes(v interface{}) {
+	p.lock.Lock()
+	defer p.lock.Unlock()
 	if p.stat != sPENDING {
 		return
 	}
@@ -114,6 +116,8 @@ func (p *Promise) handleRes(v interface{}) {
 }
 
 func (p *Promise) handleRej(v interface{}) {
+	p.lock.Lock()
+	defer p.lock.Unlock()
 	if p.stat != sPENDING {
 		return
 	}
@@ -125,6 +129,8 @@ func (p *Promise) handleRej(v interface{}) {
 }
 
 func (p *Promise) handleCatch(err error) {
+	p.lock.Lock()
+	defer p.lock.Unlock()
 	if p.stat != sPENDING {
 		return
 	}
@@ -145,30 +151,28 @@ func (p *Promise) handleCatch(err error) {
 }
 
 func (p *Promise) Then(onRes function, onRej function) *Promise {
+	p.lock.Lock()
+	defer p.lock.Unlock()
 	newP := &Promise{}
 	if p.stat == sPENDING {
 		p.next = newP
 		newP.resHandler = func(v interface{}) {
 			if onRes != nil {
-				handleValue(newP, p.value, onRes)
-				//newP.handleRes(onRes(v))
+				go handleValue(newP, p.value, onRes)
 			}
 		}
 		newP.rejHandler = func(v interface{}) {
 			if onRej != nil {
-				handleValue(newP, p.value, onRej)
-				//newP.handleRes(onRej(v))
+				go handleValue(newP, p.value, onRej)
 			}
 		}
 	} else if p.stat == sRESOLVED {
 		if onRes != nil {
-			handleValue(newP, p.value, onRes)
-			//newP.handleRes(onRes(p.value))
+			go handleValue(newP, p.value, onRes)
 		}
 	} else if p.stat == sREJECTED {
 		if onRej != nil {
-			handleValue(newP, p.value, onRej)
-			//newP.handleRes(onRej(p.value))
+			go handleValue(newP, p.value, onRej)
 		}
 	}
 	return newP
@@ -190,6 +194,8 @@ func handleValue(p *Promise, input interface{}, fn function) {
 }
 
 func (p *Promise) Catch(onErr function) *Promise {
+	p.lock.Lock()
+	defer p.lock.Unlock()
 	newP := &Promise{}
 	p.next = newP
 	if p.stat == sPENDING {
